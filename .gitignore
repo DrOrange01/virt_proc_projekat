@@ -6,3 +6,12 @@
 /Client/obj
 /Common/obj
 /Server/obj
+/Client/bin
+/Common/bin
+/Server/bin
+*.user
+*.suo
+*.tmp
+*.log
+*.cache
+*.pdb
