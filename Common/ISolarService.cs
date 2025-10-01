@@ -7,7 +7,7 @@ using System.ServiceModel;
 
 namespace Common
 {
-    [ServiceContract(SessionMode = SessionMode.NotAllowed)]
+    [ServiceContract]
     public interface ISolarService
     {
         [OperationContract]

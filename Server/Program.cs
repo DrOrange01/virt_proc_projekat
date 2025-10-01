@@ -1,10 +1,11 @@
-﻿using System;
+﻿using Server.Services;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Remoting.Services;
+using System.ServiceModel;
 using System.Text;
 using System.Threading.Tasks;
-using System.ServiceModel;
 
 namespace Service
 {
@@ -12,14 +13,45 @@ namespace Service
     {
         static void Main(string[] args)
         {
-           // ServiceHost host = new ServiceHost(typeof(LibraryService));
-            //host.Open();
+            Console.WriteLine("=== Solar Panel Data Service ===\n");
 
-            Console.WriteLine("Service is running...");
+            var service = new SolarService();
+
+            // Pretplate na događaje
+            service.OnTransferStarted += (s, e) =>
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Transfer started.");
+
+            service.OnSampleReceived += (s, count) =>
+            {
+                if (count % 10 == 0)
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Received: {count} samples");
+            };
+
+            service.OnTransferCompleted += (s, e) =>
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Transfer completed.");
+
+            service.OnWarningRaised += (s, e) =>
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] WARNING - {e.Type}: {e.Message}");
+
+            using (var host = new ServiceHost(service))
+            {
+                try
+                {
+                    host.Open();
+                    Console.WriteLine("Service is running at net.tcp://localhost:4000/SolarService");
+                    Console.WriteLine("Press ENTER to stop...\n");
+                    Console.ReadLine();
+                    host.Close();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"ERROR: {ex.Message}");
+                    host.Abort();
+                }
+            }
+
+            Console.WriteLine("Service stopped.");
             Console.ReadKey();
-
-         //   host.Close();
-            Console.WriteLine("Service is closed.");
         }
     }
 }

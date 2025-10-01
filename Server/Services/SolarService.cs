@@ -1,10 +1,11 @@
-﻿using System;
+﻿using Common;
+using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.ServiceModel;
-using Common;
 
 namespace Server.Services
 {
@@ -24,13 +25,11 @@ namespace Server.Services
         private double voltageImbalancePct;
         private int powerFlatlineWindow;
         private double powerSpikeThreshold;
-        private double dcSagThreshold;
-        private double lowEfficiencyThreshold;
 
         // Za praćenje analitike
-        private double? lastDcVolt;
         private Queue<double> recentPower;
         private List<string> warnings;
+        private double powerFlatlineEpsilon;
 
         // Događaji
         public event EventHandler OnTransferStarted;
@@ -51,8 +50,7 @@ namespace Server.Services
             voltageImbalancePct = double.Parse(ConfigurationManager.AppSettings["VoltageImbalancePct"] ?? "5.0");
             powerFlatlineWindow = int.Parse(ConfigurationManager.AppSettings["PowerFlatlineWindow"] ?? "10");
             powerSpikeThreshold = double.Parse(ConfigurationManager.AppSettings["PowerSpikeThreshold"] ?? "1000.0");
-            dcSagThreshold = double.Parse(ConfigurationManager.AppSettings["DcSagThreshold"] ?? "50.0");
-            lowEfficiencyThreshold = double.Parse(ConfigurationManager.AppSettings["LowEfficiencyThreshold"] ?? "0.8");
+            powerFlatlineEpsilon = double.Parse(ConfigurationManager.AppSettings["PowerFlatlineEpsilon"] ?? "0.5");
         }
 
         public ServerAck StartSession(PvMeta meta)
@@ -66,7 +64,6 @@ namespace Server.Services
                 currentMeta = meta;
                 sessionStart = DateTime.Now;
                 receivedCount = 0;
-                lastDcVolt = null;
                 recentPower.Clear();
                 warnings.Clear();
 
@@ -220,104 +217,76 @@ namespace Server.Services
 
         private void RunAnalytics(PvSample s)
         {
-            // ZADATAK 9: DC napon i prekidi
-            if (s.DcVolt.HasValue)
-            {
-                // DC Sag - nagli pad napona
-                if (lastDcVolt.HasValue)
-                {
-                    var delta = Math.Abs(s.DcVolt.Value - lastDcVolt.Value);
-                    if (delta > dcSagThreshold)
-                    {
-                        RaiseWarning("DcSagWarning",
-                            $"DC Voltage drop: {delta:F1}V exceeds {dcSagThreshold}V",
-                            s.RowIndex);
-                    }
-                }
-                lastDcVolt = s.DcVolt;
-
-                // DC fault - DcVolt = 0 dok je AcPwrt > 0
-                if (Math.Abs(s.DcVolt.Value) < 0.01 && s.AcPwrt.HasValue && s.AcPwrt > 0)
-                {
-                    RaiseWarning("DcFaultWarning",
-                        $"DC Voltage is 0 but AC Power is {s.AcPwrt:F1}W",
-                        s.RowIndex);
-                }
-            }
-            else
-            {
-                // Sentinel (null) dok je snaga > 0
-                if (s.AcPwrt.HasValue && s.AcPwrt > 0)
-                {
-                    RaiseWarning("DcFaultWarning",
-                        "DC Voltage is null (sentinel) but AC Power is active",
-                        s.RowIndex);
-                }
-            }
-
-            // ZADATAK 10: Efikasnost i temperatura
-            // Efikasnost: ACPWRT / (ACVLT1 * ACCUR1)
-            if (s.AcPwrt.HasValue && s.AcVlt1.HasValue && s.AcCur1.HasValue)
-            {
-                var apparentPower = s.AcVlt1.Value * s.AcCur1.Value;
-                if (apparentPower > 1.0) // izbegavamo deljenje sa nulom
-                {
-                    var efficiency = s.AcPwrt.Value / apparentPower;
-                    if (efficiency < lowEfficiencyThreshold)
-                    {
-                        RaiseWarning("LowEfficiencyWarning",
-                            $"Efficiency {efficiency:F2} below threshold {lowEfficiencyThreshold:F2}",
-                            s.RowIndex);
-                    }
-                }
-            }
-
-            // Temperatura
-            if (s.Temper.HasValue && s.Temper > overTempThreshold)
-            {
-                RaiseWarning("OverTempWarning",
-                    $"Temperature {s.Temper:F1}°C exceeds {overTempThreshold}°C",
-                    s.RowIndex);
-            }
-
-            // Power spike (iz zadatka 9 kolege)
+            // ZADATAK 9: Proizvodnja i flatline/clipping (ACPWRT)
             if (s.AcPwrt.HasValue)
             {
-                recentPower.Enqueue(s.AcPwrt.Value);
+                var currentPower = s.AcPwrt.Value;
+
+                recentPower.Enqueue(currentPower);
                 if (recentPower.Count > powerFlatlineWindow)
                     recentPower.Dequeue();
 
+                // Power Spike/Clipping
                 if (recentPower.Count >= 2)
                 {
                     var arr = new List<double>(recentPower).ToArray();
                     var last = arr[arr.Length - 1];
                     var prev = arr[arr.Length - 2];
+
                     if (Math.Abs(last - prev) > powerSpikeThreshold)
                     {
                         RaiseWarning("PowerSpikeWarning",
-                            $"Power spike: change of {Math.Abs(last - prev):F1}W",
+                            $"Power spike: change of {Math.Abs(last - prev):F1}W exceeds {powerSpikeThreshold}W",
+                            s.RowIndex);
+                    }
+                }
+
+                // Power Flatline/Stall
+                if (recentPower.Count == powerFlatlineWindow)
+                {
+                    var powerArray = recentPower.ToArray();
+                    var maxPower = powerArray.Max();
+                    var minPower = powerArray.Min();
+                    var epsilon = double.Parse(ConfigurationManager.AppSettings["PowerFlatlineEpsilon"] ?? "0.5");
+
+                    if (Math.Abs(maxPower - minPower) < epsilon)
+                    {
+                        RaiseWarning("PowerFlatlineWarning",
+                            $"Power flatline detected over {powerFlatlineWindow} samples (variation < {epsilon}W)",
                             s.RowIndex);
                     }
                 }
             }
 
-            // Voltage imbalance
+            // ZADATAK 10: Naponska konzistentnost i temperatura
+
+            // Balans linijskih napona
             if (s.Vl1to2.HasValue && s.Vl2to3.HasValue && s.Vl3to1.HasValue)
             {
                 var v1 = s.Vl1to2.Value;
                 var v2 = s.Vl2to3.Value;
                 var v3 = s.Vl3to1.Value;
+
                 var max = Math.Max(Math.Max(v1, v2), v3);
                 var min = Math.Min(Math.Min(v1, v2), v3);
                 var avg = (v1 + v2 + v3) / 3.0;
-                var imbalance = ((max - min) / avg) * 100.0;
+                var range = max - min;
+                var imbalanceThreshold = (voltageImbalancePct / 100.0) * avg;
 
-                if (imbalance > voltageImbalancePct)
+                if (range > imbalanceThreshold)
                 {
                     RaiseWarning("VoltageImbalanceWarning",
-                        $"Voltage imbalance {imbalance:F1}% exceeds {voltageImbalancePct}%",
+                        $"Voltage imbalance: range {range:F1}V exceeds {voltageImbalancePct}% of average ({imbalanceThreshold:F1}V)",
                         s.RowIndex);
                 }
+            }
+
+            // Over-temperature
+            if (s.Temper.HasValue && s.Temper > overTempThreshold)
+            {
+                RaiseWarning("OverTempWarning",
+                    $"Temperature {s.Temper:F1}°C exceeds threshold {overTempThreshold}°C",
+                    s.RowIndex);
             }
         }
 
