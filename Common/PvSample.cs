@@ -4,11 +4,12 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Runtime.Serialization;
+using System.IO;
 
 namespace Common
 {
     [DataContract]
-    public class PvSample
+    public class PvSample : IDisposable
     {
         [DataMember(IsRequired = true)]
         public int RowIndex { get; set; }
@@ -42,5 +43,61 @@ namespace Common
 
         [DataMember]
         public double? AcVlt1 { get; set; }
+        private bool disposed = false;
+
+        // Validacija podataka
+        public bool IsValid(out string errorMessage)
+        {
+            errorMessage = string.Empty;
+
+            // Provera da li su vrednosti u razumnim opsezima
+            if (AcPwrt.HasValue && AcPwrt < 0)
+            {
+                errorMessage = "AC Power cannot be negative";
+                return false;
+            }
+
+            if (DcVolt.HasValue && DcVolt <= 0)
+            {
+                errorMessage = "DC Voltage must be positive";
+                return false;
+            }
+
+            // Dodajte dodatne validacije prema potrebi
+            return true;
+        }
+
+        // Provera da li je vrednost sentinel (32767.0)
+        public static double? ProcessSentinel(double value)
+        {
+            if (Math.Abs(value - 32767.0) < 0.001)
+            {
+                return null;
+            }
+            return value;
+        }
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposed)
+            {
+                if (disposing)
+                {
+                    // Oslobađanje managed resursa
+                }
+                disposed = true;
+            }
+        }
+
+        ~PvSample()
+        {
+            Dispose(false);
+        }
     }
 }

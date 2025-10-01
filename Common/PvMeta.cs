@@ -8,7 +8,7 @@ using System.Runtime.Serialization;
 namespace Common
 {
     [DataContract]
-    public class PvMeta
+    public class PvMeta : IDisposable
     {
         [DataMember(IsRequired = true)]
         public string PlantId { get; set; } = "PLANT-001";
@@ -27,5 +27,29 @@ namespace Common
 
         [DataMember]
         public DateTime? SessionDateUtc { get; set; } = DateTime.UtcNow;
+        private bool disposed = false;
+
+        public void Dispose()
+        {
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposed)
+            {
+                if (disposing)
+                {
+                    // Oslobađanje managed resursa
+                }
+                disposed = true;
+            }
+        }
+
+        ~PvMeta()
+        {
+            Dispose(false);
+        }
     }
 }

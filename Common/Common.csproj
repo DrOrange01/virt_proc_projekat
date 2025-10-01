@@ -43,11 +43,19 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="EventArguments\SampleReceivedEventArgs.cs" />
+    <Compile Include="EventArguments\TransferCompletedEventArgs.cs" />
+    <Compile Include="EventArguments\TransferStartedEventArgs.cs" />
+    <Compile Include="EventArguments\WarningRaisedEventArgs.cs" />
+    <Compile Include="IPvDataService.cs" />
     <Compile Include="ISolarService.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="PvFaultException.cs" />
     <Compile Include="PvMeta.cs" />
     <Compile Include="PvSample.cs" />
+    <Compile Include="SampleResult.cs" />
     <Compile Include="ServerAck.cs" />
+    <Compile Include="SessionResult.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
