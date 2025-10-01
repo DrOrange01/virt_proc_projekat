@@ -12,13 +12,13 @@ namespace Service
     {
         static void Main(string[] args)
         {
-            ServiceHost host = new ServiceHost(typeof(LibraryService));
-            host.Open();
+           // ServiceHost host = new ServiceHost(typeof(LibraryService));
+            //host.Open();
 
             Console.WriteLine("Service is running...");
             Console.ReadKey();
 
-            host.Close();
+         //   host.Close();
             Console.WriteLine("Service is closed.");
         }
     }
