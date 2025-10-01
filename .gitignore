@@ -16,3 +16,6 @@
 *.cache
 *.pdb
 /SolarniPanelSolution/.vs/SolarniPanelSolution
+/Client/.vs/Client
+/Common/.vs
+/Server/.vs
