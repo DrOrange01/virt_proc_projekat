@@ -271,13 +271,14 @@ namespace Server.Services
                 var min = Math.Min(Math.Min(v1, v2), v3);
                 var avg = (v1 + v2 + v3) / 3.0;
                 var range = max - min;
-                var imbalanceThreshold = (voltageImbalancePct / 100.0) * avg;
+                var imbalanceThreshold = voltageImbalancePct * avg;
 
                 if (range > imbalanceThreshold)
                 {
                     RaiseWarning("VoltageImbalanceWarning",
-                        $"Voltage imbalance: range {range:F1}V exceeds {voltageImbalancePct}% of average ({imbalanceThreshold:F1}V)",
-                        s.RowIndex);
+                    $"Voltage imbalance: range {range:F1}V exceeds threshold {imbalanceThreshold:F1}V " +
+                    $"(VoltageImbalancePct={voltageImbalancePct} × avg={avg:F1}V)",
+                    s.RowIndex);
                 }
             }
 
