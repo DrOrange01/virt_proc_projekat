@@ -27,7 +27,7 @@ namespace Client
 
             rejectPath = rejectPath ?? Path.Combine(
                 Path.GetDirectoryName(csvPath) ?? "",
-                "rejected_client.csv"
+                "rejected_client1.csv"
             );
 
             rejectWriter = new StreamWriter(rejectPath, false);
@@ -48,7 +48,6 @@ namespace Client
             for (int i = 0; i < headers.Length; i++)
                 columnIndices[headers[i]] = i;
 
-            // Provera obaveznih kolona
             var required = new[] { "DAY", "HOUR", "ACPWRT", "DCVOLT", "TEMPER",
                                    "VL1TO2", "VL2TO3", "VL3TO1", "ACCUR1", "ACVLT1" };
             var missing = required.Where(c => !columnIndices.ContainsKey(c)).ToList();
@@ -65,23 +64,14 @@ namespace Client
             while ((line = reader.ReadLine()) != null && rowIndex < maxRows)
             {
                 rowIndex++;
-                PvSample sample = null;
-                bool isParsedSuccessfully = false;
+                PvSample sample = ParseLine(line, rowIndex);
 
-                try
+                if (sample == null)
                 {
-                    sample = ParseLine(line, rowIndex);
-                    isParsedSuccessfully = true;
-                }
-                catch (Exception ex)
-                {
-                    LogReject(rowIndex, ex.Message, line);
+                    continue;
                 }
 
-                if (isParsedSuccessfully && sample != null)
-                {
-                    yield return sample;
-                }
+                yield return sample;
             }
         }
 
@@ -89,7 +79,6 @@ namespace Client
         {
             var fields = line.Split(',');
 
-            // Obavezna polja
             var day = GetField(fields, "DAY");
             var hour = GetField(fields, "HOUR");
 
@@ -135,7 +124,6 @@ namespace Client
             if (!double.TryParse(str, NumberStyles.Float, CultureInfo.InvariantCulture, out double val))
                 return null;
 
-            // Sentinel vrednost → null
             if (Math.Abs(val - SENTINEL) < 0.001)
                 return null;
 

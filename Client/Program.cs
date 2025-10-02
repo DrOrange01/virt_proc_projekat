@@ -17,7 +17,7 @@ namespace Client
 
             var csvPath = ConfigurationManager.AppSettings["CsvPath"] ??
                           @"C:\temp\solar_data.csv";
-            var rowLimit = int.Parse(ConfigurationManager.AppSettings["RowLimitN"] ?? "100");
+            var rowLimit = 200;
 
             if (!File.Exists(csvPath))
             {
@@ -32,7 +32,6 @@ namespace Client
             {
                 try
                 {
-                    // 1. Pokretanje sesije
                     Console.WriteLine($"Starting session with file: {Path.GetFileName(csvPath)}");
                     Console.WriteLine($"Row limit: {rowLimit}\n");
 
@@ -40,7 +39,7 @@ namespace Client
                     {
                         PlantId = "PLANT-001",
                         FileName = Path.GetFileName(csvPath),
-                        TotalRows = CountLines(csvPath) - 1, // bez header-a
+                        TotalRows = CountLines(csvPath) - 1, 
                         SchemaVersion = "1.0",
                         RowLimitN = rowLimit,
                         SessionDateUtc = DateTime.UtcNow
@@ -55,7 +54,6 @@ namespace Client
 
                     Console.WriteLine($"Session started: {startAck.Message}\n");
 
-                    // 2. Slanje uzoraka
                     Console.WriteLine("Sending samples...\n");
                     int count = 0;
 
@@ -78,12 +76,10 @@ namespace Client
 
                     Console.WriteLine($"\nTotal samples sent: {count}\n");
 
-                    // 3. Završetak sesije
                     var endAck = proxy.EndSession();
                     Console.WriteLine($"Session ended: {endAck.Message}");
                     Console.WriteLine($"Server received: {endAck.ReceivedCount} samples\n");
 
-                    // 4. Pribavljanje upozorenja
                     Console.WriteLine("Fetching warnings from server...\n");
                     var warnings = proxy.GetWarnings();
 

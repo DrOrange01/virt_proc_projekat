@@ -9,7 +9,14 @@ namespace Common.EventArguments
     public class SampleReceivedEventArgs : EventArgs
     {
         public PvSample Sample { get; set; }
-        public int TotalReceived { get; set; }
-        public double ProgressPercentage { get; set; }
+        public int TotalReceived { get; }
+        public double ProgressPercentage { get; }
+
+        public SampleReceivedEventArgs(PvSample sample, int totalReceived, double progressPercentage)
+        {
+            Sample = sample;
+            TotalReceived = totalReceived;
+            ProgressPercentage = progressPercentage;
+        }
     }
 }

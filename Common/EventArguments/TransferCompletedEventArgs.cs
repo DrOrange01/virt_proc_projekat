@@ -9,7 +9,12 @@ namespace Common.EventArguments
     public class TransferCompletedEventArgs : EventArgs
     {
         public string SessionId { get; set; }
-        public int TotalSamples { get; set; }
+        public int TotalSamples { get; }
         public TimeSpan Duration { get; set; }
+
+        public TransferCompletedEventArgs(int total)
+        {
+            TotalSamples = total;
+        }
     }
 }

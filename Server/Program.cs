@@ -17,21 +17,20 @@ namespace Service
 
             var service = new SolarService();
 
-            // Pretplate na događaje
             service.OnTransferStarted += (s, e) =>
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Transfer started.");
 
-            service.OnSampleReceived += (s, count) =>
+            service.OnSampleReceived += (s, e) =>
             {
-                if (count % 10 == 0)
-                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Received: {count} samples");
+                if (e.TotalReceived % 10 == 0)
+                    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Received: {e.TotalReceived} samples");
             };
 
             service.OnTransferCompleted += (s, e) =>
                 Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Transfer completed.");
 
             service.OnWarningRaised += (s, e) =>
-                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] WARNING - {e.Type}: {e.Message}");
+                Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] WARNING - {e.WarningType}: {e.Message}");
 
             using (var host = new ServiceHost(service))
             {

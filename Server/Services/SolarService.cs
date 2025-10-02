@@ -1,4 +1,5 @@
 ﻿using Common;
+using Common.EventArguments;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
@@ -20,22 +21,20 @@ namespace Server.Services
         private DateTime sessionStart;
         private bool disposed = false;
 
-        // Pragovi iz konfiguracije
         private double overTempThreshold;
         private double voltageImbalancePct;
         private int powerFlatlineWindow;
         private double powerSpikeThreshold;
 
-        // Za praćenje analitike
         private Queue<double> recentPower;
         private List<string> warnings;
         private double powerFlatlineEpsilon;
 
-        // Događaji
-        public event EventHandler OnTransferStarted;
-        public event EventHandler<int> OnSampleReceived;
-        public event EventHandler OnTransferCompleted;
-        public event EventHandler<WarningEventArgs> OnWarningRaised;
+        public event EventHandler<EventArgs> OnTransferStarted;
+        public event EventHandler<SampleReceivedEventArgs> OnSampleReceived;
+        public event EventHandler<TransferCompletedEventArgs> OnTransferCompleted;
+        public event EventHandler<WarningRaisedEventArgs> OnWarningRaised;
+        public event EventHandler<WarningEventArgs> OnWarningRaised_;
 
         public SolarService()
         {
@@ -67,7 +66,6 @@ namespace Server.Services
                 recentPower.Clear();
                 warnings.Clear();
 
-                // Kreiranje foldera
                 var basePath = ConfigurationManager.AppSettings["DataPath"] ?? "Data";
                 var plantPath = Path.Combine(basePath, meta.PlantId);
                 var dateFolder = Path.Combine(plantPath, sessionStart.ToString("yyyy-MM-dd"));
@@ -79,7 +77,6 @@ namespace Server.Services
                 sessionWriter = new StreamWriter(sessionFile, append: true);
                 rejectWriter = new StreamWriter(rejectFile, append: true);
 
-                // Header
                 if (new FileInfo(sessionFile).Length == 0)
                 {
                     sessionWriter.WriteLine("RowIndex,Day,Hour,AcPwrt,DcVolt,Temper,Vl1to2,Vl2to3,Vl3to1,AcCur1,AcVlt1");
@@ -115,8 +112,8 @@ namespace Server.Services
                 if (sample == null)
                     return new ServerAck { Success = false, Message = "Sample is null" };
 
-                // Validacija
                 var validationError = ValidateSample(sample);
+               
                 if (!string.IsNullOrEmpty(validationError))
                 {
                     LogReject(sample.RowIndex, validationError, SampleToString(sample));
@@ -129,14 +126,12 @@ namespace Server.Services
                     };
                 }
 
-                // Snimanje
                 WriteSample(sample);
                 receivedCount++;
 
-                // Analitika
                 RunAnalytics(sample);
 
-                OnSampleReceived?.Invoke(this, receivedCount);
+                OnSampleReceived?.Invoke(this, new SampleReceivedEventArgs(sample, receivedCount, CalcPercent()));
 
                 return new ServerAck
                 {
@@ -166,7 +161,7 @@ namespace Server.Services
 
                 var duration = DateTime.Now - sessionStart;
 
-                OnTransferCompleted?.Invoke(this, EventArgs.Empty);
+                OnTransferCompleted?.Invoke(this, new TransferCompletedEventArgs(receivedCount));
 
                 var msg = $"Session {sessionId} ended. Received {receivedCount} samples in {duration.TotalSeconds:F1}s";
                 sessionId = null;
@@ -192,32 +187,36 @@ namespace Server.Services
 
         private string ValidateSample(PvSample s)
         {
-            // RowIndex mora biti monoton
+            string error = null;
             if (s.RowIndex <= 0)
-                return "Invalid RowIndex";
+                error = "Invalid RowIndex";
 
-            // AcPwrt >= 0
             if (s.AcPwrt.HasValue && s.AcPwrt < 0)
-                return "AcPwrt cannot be negative";
+                error = "AcPwrt cannot be negative";
 
-            // Naponi > 0 ako nisu null
-            if (s.DcVolt.HasValue && s.DcVolt <= 0)
-                return "DcVolt must be positive";
+            if (!s.DcVolt.HasValue || s.DcVolt <= 0)
+                error = "DcVolt must be positive";
             if (s.Vl1to2.HasValue && s.Vl1to2 <= 0)
-                return "Vl1to2 must be positive";
+                error = "Vl1to2 must be positive";
             if (s.Vl2to3.HasValue && s.Vl2to3 <= 0)
-                return "Vl2to3 must be positive";
+                error = "Vl2to3 must be positive";
             if (s.Vl3to1.HasValue && s.Vl3to1 <= 0)
-                return "Vl3to1 must be positive";
-            if (s.AcVlt1.HasValue && s.AcVlt1 <= 0)
-                return "AcVlt1 must be positive";
+                error = "Vl3to1 must be positive";
+            if (!s.AcVlt1.HasValue || s.AcVlt1 <= 0)
+                error = "AcVlt1 must be positive";
+            if (!s.Temper.HasValue || s.Temper <= 0)
+                return "Temper must be positive";
 
-            return null;
+            if (error != null)
+            {
+                OnWarningRaised?.Invoke(this, new WarningRaisedEventArgs(error));
+            }
+
+            return error;
         }
 
         private void RunAnalytics(PvSample s)
         {
-            // ZADATAK 9: Proizvodnja i flatline/clipping (ACPWRT)
             if (s.AcPwrt.HasValue)
             {
                 var currentPower = s.AcPwrt.Value;
@@ -226,7 +225,6 @@ namespace Server.Services
                 if (recentPower.Count > powerFlatlineWindow)
                     recentPower.Dequeue();
 
-                // Power Spike/Clipping
                 if (recentPower.Count >= 2)
                 {
                     var arr = new List<double>(recentPower).ToArray();
@@ -241,7 +239,6 @@ namespace Server.Services
                     }
                 }
 
-                // Power Flatline/Stall
                 if (recentPower.Count == powerFlatlineWindow)
                 {
                     var powerArray = recentPower.ToArray();
@@ -258,9 +255,6 @@ namespace Server.Services
                 }
             }
 
-            // ZADATAK 10: Naponska konzistentnost i temperatura
-
-            // Balans linijskih napona
             if (s.Vl1to2.HasValue && s.Vl2to3.HasValue && s.Vl3to1.HasValue)
             {
                 var v1 = s.Vl1to2.Value;
@@ -282,7 +276,6 @@ namespace Server.Services
                 }
             }
 
-            // Over-temperature
             if (s.Temper.HasValue && s.Temper > overTempThreshold)
             {
                 RaiseWarning("OverTempWarning",
@@ -295,7 +288,7 @@ namespace Server.Services
         {
             var w = $"[{type}] Row {rowIndex}: {message}";
             warnings.Add(w);
-            OnWarningRaised?.Invoke(this, new WarningEventArgs
+            OnWarningRaised_?.Invoke(this, new WarningEventArgs
             {
                 Type = type,
                 Message = message,
@@ -351,7 +344,6 @@ namespace Server.Services
         }
     }
 
-    // Event args klasa
     public class WarningEventArgs : EventArgs
     {
         public string Type { get; set; }

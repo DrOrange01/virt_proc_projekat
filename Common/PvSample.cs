@@ -45,12 +45,10 @@ namespace Common
         public double? AcVlt1 { get; set; }
         private bool disposed = false;
 
-        // Validacija podataka
         public bool IsValid(out string errorMessage)
         {
             errorMessage = string.Empty;
 
-            // Provera da li su vrednosti u razumnim opsezima
             if (AcPwrt.HasValue && AcPwrt < 0)
             {
                 errorMessage = "AC Power cannot be negative";
@@ -63,7 +61,6 @@ namespace Common
                 return false;
             }
 
-            // Dodajte dodatne validacije prema potrebi
             return true;
         }
 

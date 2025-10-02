@@ -9,7 +9,11 @@ namespace Common.EventArguments
     public class WarningRaisedEventArgs : EventArgs
     {
         public string WarningType { get; set; }
-        public string Message { get; set; }
+        public string Message { get; }
+        public WarningRaisedEventArgs(string message)
+        {
+            Message = message;
+        }
         public PvSample RelatedSample { get; set; }
         public DateTime Timestamp { get; set; }
     }
